@@ -1,0 +1,272 @@
+﻿@page "/"
+@using FTPer.Models
+@using FTPer.Services
+@rendermode InteractiveServer
+@inject INetworkService NetworkService
+@inject IFtpServerManager FtpServerManager
+@implements IDisposable
+
+<PageTitle>FTPer — Local FTP Server</PageTitle>
+
+<div class="app-container">
+    <header class="app-header">
+        <div class="logo">
+            <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                <line x1="12" y1="11" x2="12" y2="17"/>
+                <polyline points="9 14 12 11 15 14"/>
+            </svg>
+            <h1>FTPer</h1>
+        </div>
+        <p class="subtitle">Local WiFi FTP Server</p>
+    </header>
+
+    <main class="content">
+        @* ── Configuration Card ── *@
+        <section class="card">
+            <h2 class="card-title">
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                Configuration
+            </h2>
+
+            <div class="form-group">
+                <label for="rootPath">Shared Folder</label>
+                <input id="rootPath"
+                       type="text"
+                       class="form-input @PathValidationClass"
+                       @bind="_config.RootPath"
+                       @bind:event="oninput"
+                       placeholder="e.g. F:\Memory\temp"
+                       disabled="@IsServerBusy" />
+                @if (!string.IsNullOrWhiteSpace(_config.RootPath))
+                {
+                    <span class="hint @(IsPathValid ? "hint-success" : "hint-warning")">
+                        @(IsPathValid ? "Folder exists and is ready." : "Folder does not exist — it will be created on start.")
+                    </span>
+                }
+            </div>
+
+            <div class="form-group">
+                <label for="ipAddress">Network Interface</label>
+                <div class="input-with-action">
+                    <select id="ipAddress"
+                            class="form-input"
+                            @bind="_config.IpAddress"
+                            disabled="@IsServerBusy">
+                        @if (_networkInterfaces.Count == 0)
+                        {
+                            <option value="">No local network interfaces found</option>
+                        }
+                        @foreach (var ni in _networkInterfaces)
+                        {
+                            <option value="@ni.IpAddress">@ni.DisplayName (@ni.InterfaceType)</option>
+                        }
+                    </select>
+                    <button class="btn btn-icon"
+                            @onclick="RefreshNetworkInterfaces"
+                            disabled="@IsServerBusy"
+                            title="Refresh network interfaces">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-svg">
+                            <polyline points="23 4 23 10 17 10"/>
+                            <polyline points="1 20 1 14 7 14"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                    </button>
+                </div>
+                <span class="hint">Only private (local) IPv4 addresses are shown.</span>
+            </div>
+
+            <div class="form-group">
+                <label for="port">Port</label>
+                <input id="port"
+                       type="number"
+                       class="form-input port-input"
+                       min="1"
+                       max="65535"
+                       @bind="_config.Port"
+                       disabled="@IsServerBusy" />
+                <span class="hint">Default FTP port is 21. Use a higher port (e.g. 2121) if 21 is blocked.</span>
+            </div>
+
+            <div class="actions">
+                @if (FtpServerManager.Status == FtpServerStatus.Running)
+                {
+                    <button class="btn btn-danger btn-lg" @onclick="StopServer" disabled="@IsServerBusy">
+                        <svg viewBox="0 0 24 24" fill="currentColor" class="btn-svg"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                        Stop Server
+                    </button>
+                }
+                else
+                {
+                    <button class="btn btn-primary btn-lg" @onclick="StartServer" disabled="@(!CanStart)">
+                        <svg viewBox="0 0 24 24" fill="currentColor" class="btn-svg"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        Start Server
+                    </button>
+                }
+            </div>
+        </section>
+
+        @* ── Status Card ── *@
+        <section class="card">
+            <h2 class="card-title">
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                    <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+                    <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                    <line x1="12" y1="20" x2="12.01" y2="20"/>
+                </svg>
+                Server Status
+            </h2>
+
+            <div class="status-row">
+                <span class="status-label">Status</span>
+                <span class="status-badge @StatusCssClass">
+                    <span class="status-dot"></span>
+                    @FtpServerManager.Status
+                </span>
+            </div>
+
+            @if (FtpServerManager.Status == FtpServerStatus.Running && FtpServerManager.CurrentConfig is { } cfg)
+            {
+                <div class="connection-info">
+                    <h3>Connection Details</h3>
+
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">FTP Address</span>
+                            <code class="info-value highlight">@FtpUrl</code>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">IP Address</span>
+                            <code class="info-value">@cfg.IpAddress</code>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Port</span>
+                            <code class="info-value">@cfg.Port</code>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Shared Folder</span>
+                            <code class="info-value">@cfg.RootPath</code>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Authentication</span>
+                            <code class="info-value">Anonymous (no password)</code>
+                        </div>
+                    </div>
+
+                    <div class="help-box">
+                        <h4>How to connect from your phone or tablet</h4>
+                        <ol>
+                            <li>Make sure your device is on the <strong>same WiFi network</strong> as this PC.</li>
+                            <li>Open any FTP client app (e.g. <em>Cx File Explorer</em>, <em>Solid Explorer</em>, or <em>FE File Explorer</em>).</li>
+                            <li>Create a new FTP connection with address <code>@cfg.IpAddress</code> and port <code>@cfg.Port</code>.</li>
+                            <li>Choose <strong>Anonymous</strong> login — no username or password needed.</li>
+                            <li>Browse, upload, and download files freely!</li>
+                        </ol>
+                    </div>
+                </div>
+            }
+
+            @if (FtpServerManager.Status == FtpServerStatus.Error && !string.IsNullOrEmpty(FtpServerManager.ErrorMessage))
+            {
+                <div class="error-box">
+                    <strong>Error:</strong> @FtpServerManager.ErrorMessage
+                </div>
+            }
+
+            @if (FtpServerManager.Status == FtpServerStatus.Stopped)
+            {
+                <p class="muted-text">Configure the settings above and press <strong>Start Server</strong>.</p>
+            }
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        FTPer — Local WiFi file sharing made simple.
+    </footer>
+</div>
+
+@code {
+    private FtpServerConfig _config = new();
+    private IReadOnlyList<NetworkInterfaceInfo> _networkInterfaces = [];
+
+    // ── Computed properties ──
+
+    private bool IsPathValid =>
+        !string.IsNullOrWhiteSpace(_config.RootPath) && Directory.Exists(_config.RootPath);
+
+    private string PathValidationClass =>
+        string.IsNullOrWhiteSpace(_config.RootPath) ? "" : IsPathValid ? "input-valid" : "input-warning";
+
+    private bool IsServerBusy =>
+        FtpServerManager.Status is FtpServerStatus.Starting or FtpServerStatus.Stopping;
+
+    private bool CanStart =>
+        !IsServerBusy
+        && !string.IsNullOrWhiteSpace(_config.IpAddress)
+        && !string.IsNullOrWhiteSpace(_config.RootPath)
+        && _config.Port is > 0 and <= 65535;
+
+    private string FtpUrl =>
+        FtpServerManager.CurrentConfig is { } cfg
+            ? $"ftp://{cfg.IpAddress}:{cfg.Port}"
+            : string.Empty;
+
+    private string StatusCssClass => FtpServerManager.Status switch
+    {
+        FtpServerStatus.Running  => "badge-running",
+        FtpServerStatus.Starting
+            or FtpServerStatus.Stopping => "badge-busy",
+        FtpServerStatus.Error    => "badge-error",
+        _                        => "badge-stopped"
+    };
+
+    // ── Lifecycle ──
+
+    protected override void OnInitialized()
+    {
+        FtpServerManager.OnStatusChanged += HandleStatusChanged;
+        RefreshNetworkInterfaces();
+
+        if (_networkInterfaces.Count > 0 && string.IsNullOrEmpty(_config.IpAddress))
+        {
+            _config.IpAddress = _networkInterfaces[0].IpAddress;
+        }
+    }
+
+    // ── Event handlers ──
+
+    private void RefreshNetworkInterfaces()
+    {
+        _networkInterfaces = NetworkService.GetAvailableLocalAddresses();
+
+        if (!_networkInterfaces.Any(ni => ni.IpAddress == _config.IpAddress))
+        {
+            _config.IpAddress = _networkInterfaces.FirstOrDefault()?.IpAddress ?? string.Empty;
+        }
+    }
+
+    private async Task StartServer()
+    {
+        if (!CanStart) return;
+        await FtpServerManager.StartAsync(_config);
+    }
+
+    private async Task StopServer()
+    {
+        await FtpServerManager.StopAsync();
+    }
+
+    private void HandleStatusChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        FtpServerManager.OnStatusChanged -= HandleStatusChanged;
+    }
+}
