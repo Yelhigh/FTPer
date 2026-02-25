@@ -54,16 +54,20 @@ public sealed class FtpServerManager : IFtpServerManager
                 opt.RootPath = config.RootPath;
             });
 
-            // Register the FTP server with our accept-all membership provider
-            // so any client can connect without fiddling with credentials.
+            services.Configure<FtpAuthenticationOptions>(opt =>
+            {
+                opt.RequireAuthentication = config.RequireAuthentication;
+                opt.Username = config.Username;
+                opt.Password = config.Password;
+            });
+
             services.AddFtpServer(builder =>
             {
                 builder.UseDotNetFileSystem();
                 builder.EnableAnonymousAuthentication();
             });
 
-            // Replace the default membership provider with one that accepts anything
-            services.AddSingleton<IMembershipProvider, AllowAllMembershipProvider>();
+            services.AddSingleton<IMembershipProvider, ConfigurableMembershipProvider>();
 
             // Bind the FTP server to the selected local IP and port
             services.Configure<FtpServerOptions>(opt =>

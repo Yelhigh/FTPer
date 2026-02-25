@@ -10,12 +10,20 @@ public sealed class FtpServerConfig
     public int Port { get; set; } = 21;
 
     /// <summary>
-    /// Creates a deep copy of this configuration.
+    /// When true, the server requires the configured <see cref="Username"/>
+    /// and <see cref="Password"/>. When false, anonymous access is allowed.
     /// </summary>
+    public bool RequireAuthentication { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+
     public FtpServerConfig Clone() => new()
     {
         RootPath = RootPath,
         IpAddress = IpAddress,
-        Port = Port
+        Port = Port,
+        RequireAuthentication = RequireAuthentication,
+        Username = Username,
+        Password = Password
     };
 }

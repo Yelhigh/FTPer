@@ -1,24 +1,61 @@
 using System.Security.Claims;
 using FubarDev.FtpServer.AccountManagement;
+using Microsoft.Extensions.Options;
 
 namespace FTPer.Services;
 
 /// <summary>
-/// Membership provider that accepts any username/password combination,
-/// including empty credentials. This makes connecting from mobile FTP
-/// clients frictionless — no need to remember to type "anonymous".
+/// Options that configure credential validation for the FTP server.
 /// </summary>
-public sealed class AllowAllMembershipProvider : IMembershipProvider
+public sealed class FtpAuthenticationOptions
 {
-    public Task<MemberValidationResult> ValidateUserAsync(
-        string username,
-        string password)
+    public bool RequireAuthentication { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Membership provider that supports two modes:
+/// - Anonymous: accepts any credentials (default)
+/// - Authenticated: only accepts the configured username/password
+/// </summary>
+public sealed class ConfigurableMembershipProvider : IMembershipProvider
+{
+    private readonly FtpAuthenticationOptions _options;
+
+    public ConfigurableMembershipProvider(IOptions<FtpAuthenticationOptions> options)
     {
-        var identity = new ClaimsIdentity("custom", ClaimsIdentity.DefaultNameClaimType, ClaimsIdentity.DefaultRoleClaimType);
-        identity.AddClaim(new Claim(ClaimsIdentity.DefaultNameClaimType, string.IsNullOrWhiteSpace(username) ? "anonymous" : username));
+        _options = options.Value;
+    }
+
+    public Task<MemberValidationResult> ValidateUserAsync(string username, string password)
+    {
+        if (_options.RequireAuthentication)
+        {
+            var usernameMatch = string.Equals(username, _options.Username, StringComparison.OrdinalIgnoreCase);
+            var passwordMatch = string.Equals(password, _options.Password, StringComparison.Ordinal);
+
+            if (!usernameMatch || !passwordMatch)
+            {
+                return Task.FromResult(
+                    new MemberValidationResult(MemberValidationStatus.InvalidLogin));
+            }
+        }
+
+        var identity = new ClaimsIdentity(
+            "custom",
+            ClaimsIdentity.DefaultNameClaimType,
+            ClaimsIdentity.DefaultRoleClaimType);
+
+        identity.AddClaim(new Claim(
+            ClaimsIdentity.DefaultNameClaimType,
+            string.IsNullOrWhiteSpace(username) ? "anonymous" : username));
+
         identity.AddClaim(new Claim(ClaimsIdentity.DefaultRoleClaimType, "user"));
 
-        var principal = new ClaimsPrincipal(identity);
-        return Task.FromResult(new MemberValidationResult(MemberValidationStatus.AuthenticatedUser, principal));
+        return Task.FromResult(
+            new MemberValidationResult(
+                MemberValidationStatus.AuthenticatedUser,
+                new ClaimsPrincipal(identity)));
     }
 }

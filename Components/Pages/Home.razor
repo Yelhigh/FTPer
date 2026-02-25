@@ -1,7 +1,7 @@
-﻿@page "/"
+@page "/"
 @using FTPer.Models
 @using FTPer.Services
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject INetworkService NetworkService
 @inject IFtpServerManager FtpServerManager
 @implements IDisposable
@@ -91,6 +91,42 @@
                 <span class="hint">Default FTP port is 21. Use a higher port (e.g. 2121) if 21 is blocked.</span>
             </div>
 
+            <div class="form-group">
+                <label class="toggle-label @(_config.RequireAuthentication ? "is-checked" : "") @(IsServerBusy ? "is-disabled" : "")">
+                    <input type="checkbox"
+                           class="toggle-checkbox"
+                           @bind="_config.RequireAuthentication"
+                           disabled="@IsServerBusy" />
+                    <span class="toggle-track"></span>
+                    <span class="toggle-text">Require username &amp; password</span>
+                </label>
+                <span class="hint">When off, anyone on the network can connect without credentials (anonymous).</span>
+            </div>
+
+            @if (_config.RequireAuthentication)
+            {
+                <div class="credentials-panel">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input id="username"
+                               type="text"
+                               class="form-input"
+                               @bind="_config.Username"
+                               placeholder="e.g. admin"
+                               disabled="@IsServerBusy" />
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input id="password"
+                               type="password"
+                               class="form-input"
+                               @bind="_config.Password"
+                               placeholder="Enter password"
+                               disabled="@IsServerBusy" />
+                    </div>
+                </div>
+            }
+
             <div class="actions">
                 @if (FtpServerManager.Status == FtpServerStatus.Running)
                 {
@@ -153,7 +189,11 @@
                         </div>
                         <div class="info-item">
                             <span class="info-label">Authentication</span>
-                            <code class="info-value">Anonymous (no password)</code>
+                            <code class="info-value">
+                                @(cfg.RequireAuthentication
+                                    ? $"Required (user: {cfg.Username})"
+                                    : "Anonymous (no password)")
+                            </code>
                         </div>
                     </div>
 
@@ -163,7 +203,14 @@
                             <li>Make sure your device is on the <strong>same WiFi network</strong> as this PC.</li>
                             <li>Open any FTP client app (e.g. <em>Cx File Explorer</em>, <em>Solid Explorer</em>, or <em>FE File Explorer</em>).</li>
                             <li>Create a new FTP connection with address <code>@cfg.IpAddress</code> and port <code>@cfg.Port</code>.</li>
-                            <li>Choose <strong>Anonymous</strong> login — no username or password needed.</li>
+                            @if (cfg.RequireAuthentication)
+                            {
+                                <li>Enter username <code>@cfg.Username</code> and the password you configured.</li>
+                            }
+                            else
+                            {
+                                <li>Choose <strong>Anonymous</strong> login — no username or password needed.</li>
+                            }
                             <li>Browse, upload, and download files freely!</li>
                         </ol>
                     </div>
@@ -208,7 +255,10 @@
         !IsServerBusy
         && !string.IsNullOrWhiteSpace(_config.IpAddress)
         && !string.IsNullOrWhiteSpace(_config.RootPath)
-        && _config.Port is > 0 and <= 65535;
+        && _config.Port is > 0 and <= 65535
+        && (!_config.RequireAuthentication
+            || (!string.IsNullOrWhiteSpace(_config.Username)
+                && !string.IsNullOrWhiteSpace(_config.Password)));
 
     private string FtpUrl =>
         FtpServerManager.CurrentConfig is { } cfg
@@ -229,6 +279,15 @@
     protected override void OnInitialized()
     {
         FtpServerManager.OnStatusChanged += HandleStatusChanged;
+
+        // If the server is already running (page reopened), restore the form
+        // from the running configuration so the UI stays in sync.
+        if (FtpServerManager.Status == FtpServerStatus.Running
+            && FtpServerManager.CurrentConfig is { } runningConfig)
+        {
+            _config = runningConfig.Clone();
+        }
+
         RefreshNetworkInterfaces();
 
         if (_networkInterfaces.Count > 0 && string.IsNullOrEmpty(_config.IpAddress))

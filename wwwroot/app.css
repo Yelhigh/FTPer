@@ -535,6 +535,86 @@ select.form-input {
     margin-left: .75rem;
 }
 
+/* ── Toggle Switch ── */
+.form-group .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    cursor: pointer;
+    user-select: none;
+    font-size: .95rem;
+    font-weight: 500;
+    color: var(--text);
+    text-transform: none;
+    letter-spacing: normal;
+    margin-bottom: 0;
+}
+
+.toggle-checkbox {
+    position: absolute;
+    width: 0;
+    height: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.toggle-track {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    min-width: 44px;
+    height: 24px;
+    background: var(--border);
+    border-radius: 12px;
+    transition: background var(--transition);
+}
+
+.toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    transition: all var(--transition);
+}
+
+.toggle-label.is-checked .toggle-track {
+    background: var(--accent);
+}
+
+.toggle-label.is-checked .toggle-track::after {
+    left: 23px;
+    background: #fff;
+}
+
+.toggle-label.is-disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+.toggle-text {
+    font-weight: 500;
+    line-height: 24px;
+}
+
+/* ── Credentials Panel ── */
+.credentials-panel {
+    background: var(--bg-card-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.15rem 1.25rem .25rem;
+    margin-bottom: 1.25rem;
+    animation: slideDown .2s ease;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Responsive ── */
 @media (max-width: 560px) {
     .app-container {
